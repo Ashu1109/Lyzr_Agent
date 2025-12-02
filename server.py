@@ -145,13 +145,15 @@ async def chat(request: ChatRequest):
 
         session_id = request.session_id
 
-        # Create new session if not provided
-        if not session_id or session_id == "null":
+        # Create new session if not provided or invalid
+        if not session_id or session_id in ["null", "undefined", "None", ""]:
             print("DEBUG: Creating new session...")
             session_id = create_chat_session(request.user_id, title=request.message[:30] + "...")
             if not session_id:
                 raise HTTPException(status_code=500, detail="Failed to create chat session")
             print(f"DEBUG: Created new session: {session_id}")
+        else:
+            print(f"DEBUG: Continuing existing session: {session_id}")
 
         # Save user message
         add_message_to_session(session_id, "user", request.message)

@@ -108,7 +108,9 @@ def create_data_science_agent(tokens: dict):
 
 **Rules:**
 - Call each tool a maximum of ONE time per request.
-- If a tool returns "Error: [Service] not connected", include that in your response.
+- **If a tool returns "Error: [Service] not connected"**, you MUST return the error message back to the Master Orchestrator.
+  - DO NOT try alternative services or retry
+  - Simply return the error so the user can be informed they need to connect that service
 - Present results in a clean, bulleted format with relevant details.
 - After gathering all requested data, immediately provide your final formatted response.
 """,

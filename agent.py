@@ -42,13 +42,17 @@ def create_orchestrator(user_id: str):
 - **Use transfer_to_agent** to delegate to the appropriate sub-agent.
 - **Pass the full user query** to the appropriate agent - let the sub-agent handle the details.
 - **After receiving the agent's response**, format it nicely and present it to the user.
-- **Do NOT retry** if an agent returns an error - just inform the user.
+- **If an agent returns an error about a service not being connected** (e.g., "Error: Gmail not connected"), tell the user:
+  - The service needs to be connected to access that data
+  - They can connect it by visiting the Connections page in the app
+  - Offer to help with other connected services or alternative tasks
 - **Be concise** in your final response to the user.
 
 **Workflow:**
 1. Identify which agent(s) should handle the user's request
 2. Call transfer_to_agent with the appropriate agent name
-3. Present the results in a clear, user-friendly format
+3. If you receive an error about a disconnected service, guide the user to connect it
+4. Present the results in a clear, user-friendly format
 """,
         tools=[transfer_to_agent],
         sub_agents=[data_science_agent, research_agent, memory_agent]
