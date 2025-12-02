@@ -1,0 +1,16 @@
+google-adk
+pymongo
+google-api-python-client
+slack-sdk
+PyGithub
+fastapi
+uvicorn
+python-dotenv
+supermemory
+openai
+duckduckgo-search
+beautifulsoup4
+requests
+litellm
+psycopg2-binary
+sqlalchemy

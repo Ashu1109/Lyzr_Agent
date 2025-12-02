@@ -1,0 +1,12 @@
+from duckduckgo_search import DDGS
+
+def search_web(query: str, max_results: int = 5):
+    """
+    Performs a web search using DuckDuckGo.
+    """
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+        return results
+    except Exception as e:
+        return f"Error searching web: {str(e)}"
