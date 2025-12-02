@@ -6,11 +6,13 @@ Based on: https://google.github.io/adk-docs/sessions/
 
 import os
 import json
+import time
 from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session as DBSession
+from sqlalchemy.exc import OperationalError
 from google.adk.sessions.base_session_service import BaseSessionService
 from google.adk.sessions.session import Session
 from google.adk.events.event import Event
@@ -45,14 +47,47 @@ class PostgresSessionService(BaseSessionService):
         Args:
             database_url: PostgreSQL connection URL
         """
-        self.engine = create_engine(database_url)
+        # Configure connection pooling for production with SSL
+        self.engine = create_engine(
+            database_url,
+            pool_size=10,  # Maximum number of permanent connections
+            max_overflow=20,  # Maximum number of overflow connections
+            pool_pre_ping=True,  # Verify connections before using them
+            pool_recycle=3600,  # Recycle connections after 1 hour
+            connect_args={
+                "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+            }
+        )
         Base.metadata.create_all(self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-        print(f"PostgresSessionService initialized with database")
+        self.SessionLocal = sessionmaker(bind=self.engine, autocommit=False, autoflush=False)
+        print(f"PostgresSessionService initialized with database and connection pooling")
 
     def _get_db(self) -> DBSession:
         """Get database session."""
         return self.SessionLocal()
+
+    def _retry_on_connection_error(self, func, max_retries=3, delay=1):
+        """Retry a function on connection errors."""
+        for attempt in range(max_retries):
+            try:
+                return func()
+            except OperationalError as e:
+                if "SSL connection has been closed" in str(e) or "connection" in str(e).lower():
+                    if attempt < max_retries - 1:
+                        print(f"Connection error, retrying in {delay}s... (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(delay)
+                        # Dispose and recreate engine on connection errors
+                        try:
+                            self.engine.dispose()
+                        except:
+                            pass
+                        continue
+                raise
+        return None
 
     def _make_session_key(self, app_name: str, user_id: str, session_id: str) -> str:
         """Create unique session key."""
@@ -210,28 +245,31 @@ class PostgresSessionService(BaseSessionService):
         user_id: str,
         session_id: str
     ) -> Optional[Session]:
-        """Retrieve a session from PostgreSQL."""
-        db = self._get_db()
-        try:
-            session_key = self._make_session_key(app_name, user_id, session_id)
-            record = db.query(SessionRecord).filter_by(id=session_key).first()
+        """Retrieve a session from PostgreSQL with retry logic."""
+        def _get_session_inner():
+            db = self._get_db()
+            try:
+                session_key = self._make_session_key(app_name, user_id, session_id)
+                record = db.query(SessionRecord).filter_by(id=session_key).first()
 
-            if not record:
-                print(f"Session not found in PostgreSQL: {session_key}")
-                return None
+                if not record:
+                    print(f"Session not found in PostgreSQL: {session_key}")
+                    return None
 
-            # Deserialize events
-            events = [self._deserialize_event(e) for e in json.loads(record.events_json)]
+                # Deserialize events
+                events = [self._deserialize_event(e) for e in json.loads(record.events_json)]
 
-            print(f"Retrieved session from PostgreSQL: {session_key} with {len(events)} events")
-            return Session(
-                app_name=app_name,
-                user_id=user_id,
-                id=session_id,
-                events=events
-            )
-        finally:
-            db.close()
+                print(f"Retrieved session from PostgreSQL: {session_key} with {len(events)} events")
+                return Session(
+                    app_name=app_name,
+                    user_id=user_id,
+                    id=session_id,
+                    events=events
+                )
+            finally:
+                db.close()
+
+        return self._retry_on_connection_error(_get_session_inner)
 
     async def delete_session(
         self,
