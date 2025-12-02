@@ -31,7 +31,7 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # Next.js dev server
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "https://lyzrproject-two.vercel.app"],  # Next.js dev server and production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
