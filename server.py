@@ -162,7 +162,14 @@ async def chat(request: ChatRequest):
         
         async def stream_with_persistence():
             full_response = ""
+            # Buffer to hold the [DONE] signal
+            done_signal = None
+
             async for chunk in stream_generator(agent, request.message, request.user_id, session_id):
+                if chunk == "data: [DONE]\n\n":
+                    done_signal = chunk
+                    continue
+                
                 if chunk.startswith("data: "):
                     try:
                         data = json.loads(chunk[6:])
@@ -176,8 +183,12 @@ async def chat(request: ChatRequest):
             if full_response:
                 add_message_to_session(session_id, "assistant", full_response)
             
-            # Send session_id to client
+            # Send session_id to client BEFORE [DONE]
             yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+
+            # Finally send [DONE] if we received it
+            if done_signal:
+                yield done_signal
 
         return StreamingResponse(
             stream_with_persistence(),
